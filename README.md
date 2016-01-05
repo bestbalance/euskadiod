@@ -1,5 +1,5 @@
 # euskadiod
-OSAKIDETZA HURBIL
+OSAKIDETZA HURBIL (SALUD CERCA)
 
 Aplicacion presentada al concurso de aplicaciones Open Data del Gobierno Vasco.
 URL de la aplicación: http://opendatabloga.korpoweb.com/blog-es/concurso-proyectos/1104/
