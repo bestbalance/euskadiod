@@ -1,0 +1,294 @@
+<!DOCTYPE HTML>
+<html lang="en-US">
+<!-- 
+	App Osakidetza Hurbil
+	presentada en el Concurso Open Data del Gobierno Vasco Dic/2015
+	Autora: https://es.linkedin.com/in/cpellicerlostao
+-->
+<head>
+	<title>Open Data Euskadi</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta charset="UTF-8">
+	
+	<!-- JQuery Mobile -->
+	<link rel="stylesheet" href="http://code.jquery.com/mobile/1.0a1/jquery.mobile-1.0a1.min.css" />
+	<script src="http://code.jquery.com/jquery-1.4.3.min.js"></script>
+	<script src="http://code.jquery.com/mobile/1.0a1/jquery.mobile-1.0a1.min.js"></script>
+	
+	<!-- Contenido propio -->
+	<link rel="stylesheet" href="mycss.css" />
+	<script src="data.js"></script>  <!-- Datos de apertura Osakidetza-->
+	<script src="directionsProtocol.js"></script> <!-- Deteccion de dispositivo para calculo de rutas-->
+	
+	<!-- Pagina de Carga (pagina blanca mientras carga la app)	-->
+    <style>
+			#work-in-progress {
+			  position: fixed;
+			  width: 100%;
+			  height: 100%;
+			  font-size: 150px;
+			  text-align: center;
+			  vertical-align: middle;
+			  color: #000000;
+			  z-index: 200000;
+			  background-color: #FFFFFF;
+			}
+     </style>
+    <script type="text/javascript">
+      $(window).bind("load", function () {
+        $('#work-in-progress').fadeOut(100);
+    });
+    </script>
+
+</head>
+
+<body>
+	<!-- Pagina de Carga -->
+	 <div id="work-in-progress">
+        <div class="work-spinner"></div>
+ 	</div>
+ 	
+ 	<!-- Pagina Principal-->
+	<div data-role="page" style="width:100%; height:100%; padding:0;">
+	    <div data-role="header" data-theme="b" >
+	    	<h1>OSAKIDETZA<br>HURBIL</h1>
+	    </div>	    
+	    <div role="main" class="ui-content" id="map-canvas">
+	    	<h4 align="center"><img src="images/Osakidetza_logo_M.png" /></h4> 
+	        <h1 align="center" id="mytext"></h1>
+	    </div>
+	    <div data-role="footer" class="ui-footer" data-theme="b" ><!--data-position="fixed" data-fullscreen="true" style="bottom:0-->
+			<h4><a href="map.html">Mapa</a></h4>
+		</div><!-- /footer -->
+	</div>
+	
+	<!-- Codigo Javascript para implementar la funcionalidad deseada en google maps -->
+	<script type="text/javascript" src="http://maps.google.com/maps/api/js?sensor=false"></script>
+	<script type="text/javascript">
+		
+		//Definiendo una function 'contains' para los arrays
+		Array.prototype.contains = function(obj) {
+		    var i = this.length;
+		    while (i--) {
+		        if (this[i] == obj) {
+		            return true;
+		        }
+		    }
+		    return false;
+		};
+		
+		//Funcion Heversine para medir distancias (https://www.geodatasource.com/developers/javascript)
+		//Tener en cuenta que las coordenadas se especifican como [longitud, latitud]
+		function haversineDistance(coords1, coords2, isMiles) {
+		  function toRad(x) {
+		    return x * Math.PI / 180;
+		  }		
+		  var lon1 = coords1[0];
+		  var lat1 = coords1[1];		
+		  var lon2 = coords2[0];
+		  var lat2 = coords2[1];		
+		  var R = 6371; // km		
+		  var x1 = lat2 - lat1;
+		  var dLat = toRad(x1);
+		  var x2 = lon2 - lon1;
+		  var dLon = toRad(x2);
+		  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+		    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+		    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+		  var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+		  var d = R * c;
+		  if(isMiles) d /= 1.60934;		
+		  return d;
+		}
+	
+		//Calculamos la fecha actual
+		var today = new Date();
+		var dd = today.getDate();
+		var mm = today.getMonth()+1; //Enero empieza con 0, asi que sumamos 1 al mes
+		var yyyy = today.getFullYear();
+		var ds = today.getDay();
+		var day = 'Domingo';
+		if (ds==1){day='Lunes';};if (ds==2){day='Martes';};if (ds==3){day='Miercoles';};
+		if (ds==4){day='Jueves';};if (ds==5){day='Viernes';};if (ds==6){day='Sabado';};
+		var horario = "Horario "+day +": ";
+		var horaAhora = today.getHours();		
+		if(dd<10) {dd='0'+dd;};
+		if(mm<10) {mm='0'+mm;};
+		today = mm+'/'+dd+'/'+yyyy;
+		
+		//Comprobar si hoy es un dia festivo en todo el Pais Vasco
+		var festivos = ['01/01/2016','06/01/2016','24/03/2016','25/03/2016','28/03/2016','25/07/2016','15/08/2016','07/10/2016','12/10/2016'];
+		if (festivos.contains(today)){
+			ds = 0; //Tomamos los horarios de Domingo si el dia es Festivo
+			$("#mytext").html("Centros disponibles hoy Festivo a las "+horaAhora+" horas");
+		}else{
+			$("#mytext").html("Centros disponibles el "+day+" a las "+horaAhora+" horas");
+		}	
+		
+		//Obtener la geoposicion desde el navegador
+		var myPosition = [];
+		// Cuando abre la pagina del mapa leer localizacion y mostrarla en el mapa
+		$('.page-map').live("pagecreate", function() {
+			if (navigator.geolocation) {
+				navigator.geolocation.getCurrentPosition(function(position){
+					var lat = position.coords.latitude;
+					var longi = position.coords.longitude;
+					myPosition = [longi,lat];
+					initialize(lat, longi);
+				});
+			}
+			else {
+				//cuando no esta habilitada la geolocalizacion pedir que se habilite
+				alert('Habilite la Geolocalizacion en su navegador.');
+			}
+		});
+		
+		//Mostrar el mapa con la posicion actual y todos los centros y hospitales que esten abiertos actualmente
+		function initialize(lat,lng) {
+			var latlng = new google.maps.LatLng(lat, lng);
+			var myOptions = {
+				zoom: 14,
+				center: latlng,
+				mapTypeId: google.maps.MapTypeId.ROADMAP
+		    };
+		    var map = new google.maps.Map(document.getElementById("map_canvas"),myOptions);
+		    
+			//Crear marcador de posicion actual
+			var marker = new google.maps.Marker({
+	            position: latlng,
+	            map: map,
+	            title: "Posicion actual"
+        	});
+        	var infowindow = new google.maps.InfoWindow({
+    			content: "Usted esta aqui!"
+  			});
+  			marker.addListener('click', function() {
+			    infowindow.open(map, marker);
+			});
+			
+			//Añadir todos los centros y hospitales abiertos actualmente
+			setHospitalMarkers(map);
+		};
+		
+		/* Funcion para añadir todos los centros y hospitales abiertos actualmente
+		 * Los datos de apertura de hospitales los contiene el fichero data.js
+		 * para cada centro se tiene un array de 9 posiciones con su nombre, sus coordenadas, 
+		 * sus horarios de apertura en modo texto y en modo array (los horarios se ordenan ["domingo","lunes",..,"sabado"])
+		 * también esta su numero de telefono, su url y un color para el icono 
+		 * si el centro es un hospital el icono sera rojo, en casoc ontrario azul 
+		 * 
+		 * Ejemplo array de un centro
+			0       ['Centro de Salud Aranbizkarra I',
+			1,2     42.8515183,-2.6645412,
+			3       1,
+			4       ["0-0","8-20","8-20","8-20","8-20","8-20","0-0"],
+			5       [[],[8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],[8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],[8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],[8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],[8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],[]],
+			6       945006840,
+			7       "http://opendata.euskadi.eus/catalogo/-/contenidos/sanidad_centro/aranbizkarra_i/es_def/index.html",
+			8       "blue"],
+		 */
+		
+		function setHospitalMarkers(map) {
+		  // Creamos dos iconos para los marcadores con la imagen de Osakidetza
+		  // uno rojo para hospitales y otro azul para el resto de centros
+		  //////////////////////////////////////////////////////////////////////7
+		  // Marker sizes are expressed as a Size of X,Y where the origin of the image
+		  // (0,0) is located in the top left of the image.		
+		  // Origins, anchor positions and coordinates of the marker increase in the X
+		  // direction to the right and in the Y direction down.
+		  // This marker is 20 pixels wide by 32 pixels high.
+		  var b_image = {
+		    url: 'images/Osakidetza_logo_S_azul_peque.png',
+		    // This marker is 30 pixels wide by 30 pixels high.
+		    size: new google.maps.Size(30, 30),
+		    // The origin for this image is (0, 0).
+		    origin: new google.maps.Point(0, 0),
+		    // The anchor for this image is the base of the flagpole at (0, 32).
+		    anchor: new google.maps.Point(0, 30)
+		  };
+		  var r_image = {
+		    url: 'images/Osakidetza_logo_S_rojo_peque.png',
+		    // This marker is 30 pixels wide by 30 pixels high.
+		    size: new google.maps.Size(30, 30),
+		    // The origin for this image is (0, 0).
+		    origin: new google.maps.Point(0, 0),
+		    // The anchor for this image is the base of the flagpole at (0, 32).
+		    anchor: new google.maps.Point(0, 30)
+		  };
+		  
+		  // Shapes define the clickable region of the icon. The type defines an HTML
+		  // <area> element 'poly' which traces out a polygon as a series of X,Y points.
+		  // The final coordinate closes the poly by connecting to the first coordinate.
+		  //coords: [1, 1, 1, 20, 18, 20, 18, 1],
+		  var shape = {
+		    coords: [1, 1, 1, 30, 28, 30, 28, 1],
+		    type: 'poly'
+		  };
+		  
+		  //Creamos los marcadores
+	      var hmarkers = [];
+		  var hinfowindows = [];
+		  //Recorremos data.js para identificar todos los centros que estan abiertos ahora
+		  //la variable ds controla el dia que es hoy y la variable horaAhora la hora actual
+		  for (var i = 0; i < hospitals.length; i++) {
+		    var hospital = hospitals[i];
+		    var abiertohoy = hospital[5][ds]; //Array de rango de horas a las que abre el centro hoy
+		    // si horaAhora esta en el rango de horas en las que el centro esta abierto
+			// se añade un marcador al mapa con sus datos de apertura contacto y como llegar hasta el
+			if (abiertohoy.contains(horaAhora)){
+				
+					//Calculamos la distancia aproximada en linea recta 
+					// a la que esta el centro desde nuestra posicion actual
+					var distance = haversineDistance([hospital[2], hospital[1]],myPosition, false);
+					var distancetxt = '';
+					if (distance<1){
+						distancetxt = Math.round(distance*1000) + ' metros'
+					}else{
+						distancetxt = Math.round(distance) + ' Km'
+					};
+					
+					//Calculamos la peticion de ruta hasta el centro desde nuestra posicion actual
+					var directions = protocol+"?daddr="+hospital[1]+","+hospital[2]+"&saddr=Current+Location&lang=es";
+					
+					//Fijamos el icono del marcador para el centro
+					if (hospital[8]=="red"){
+						image = r_image;
+					}else{
+						image = b_image;
+					};
+					
+					//Finalmente Creamos el marcador
+					//En el titulo recogemos todos los datos que queremos mostrar del centro
+					//Su nombre - con un link para poder ir a la pagina web del centro
+					//Su horario en el dia actual
+					//La distancia aproximada a la que nos encontramos (linea recta)
+					//Su telefono - con un link para poder llamar al centro
+					//Las indicaciones para poder llegar a el por medio de la aplicacion de mapas del dispositivo
+				    hmarkers[i]= new google.maps.Marker({
+				      position: {lat: hospital[1], lng: hospital[2]},
+				      map: map,
+				      icon: image,
+				      shape: shape,
+				      title: '<a href="'+hospital[7]+'" rel="external">'+hospital[0]+"</a><br>"+horario+hospital[4][ds]+'</br>Distancia aprox. '+distancetxt+'<br>Llamar <a href="tel:+34'+hospital[6]+'" rel="external">'+hospital[6]+'</a><br><a href="'+directions+'" rel="external">Como llegar</a>'
+				    });
+				    
+					//Creamos una ventana de pop-up para que aparezcan los detalles del centro
+					//cuando se haga click sobre su marcador
+					//El contenido del pop-up, será el titulo que hemos puesto al marcador
+					hmarkers[i].addListener('click', function() {
+							  	
+					  	if (!hinfowindows[i]) {
+							// if the infowindow doesn't exist, create an empty InfoWindow object
+							hinfowindows[i]= new google.maps.InfoWindow();
+						}
+						hinfowindows[i].setContent(this.title);
+						hinfowindows[i].open(map, this);
+		  		    });
+		  };
+	     }
+		};
+
+
+	</script>
+</body>
+</html>
